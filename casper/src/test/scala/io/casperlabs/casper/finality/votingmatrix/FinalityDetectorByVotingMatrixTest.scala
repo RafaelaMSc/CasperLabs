@@ -1,5 +1,6 @@
 package io.casperlabs.casper.finality.votingmatrix
 
+import cats.data.StateT
 import cats.effect.Sync
 import cats.implicits._
 import cats.mtl.FunctorRaise
@@ -614,6 +615,79 @@ class FinalityDetectorByVotingMatrixTest
                      lfb = genesis
                    )
         _ = c4 shouldBe empty
+      } yield ()
+  }
+
+  // see [casper/src/test/resources/casper/CON-654_testnet_finalizer_bug.jpg]
+  it should "not detect finality when there's none (a test case from the CON-654 bug)" in withCombinedStorage() {
+    implicit storage =>
+      val v1     = generateValidator("V1")
+      val v2     = generateValidator("V2")
+      val v3     = generateValidator("V3")
+      val v4     = generateValidator("V4")
+      val v5     = generateValidator("V5")
+      val v1Bond = Bond(v1, 52)
+      val v2Bond = Bond(v2, 51)
+      val v3Bond = Bond(v3, 50)
+      val v4Bond = Bond(v4, 54)
+      val v5Bond = Bond(v5, 53)
+      val bonds  = Seq(v1Bond, v2Bond, v3Bond, v4Bond, v5Bond)
+      import monix.execution.Scheduler.Implicits.global
+      val genesis = createAndStoreMessage[Task](Seq(), ByteString.EMPTY, bonds).runSyncUnsafe()
+
+      type LFB = Block
+
+      def createAndAdvanceTheLFB(v: Validator, parent: Block, justifications: List[Block])(
+          implicit detector: FinalityDetectorVotingMatrix[Task]
+      ): StateT[Task, LFB, Block] =
+        StateT { lfb =>
+          createBlockAndUpdateFinalityDetector[Task](
+            Seq(parent.blockHash),
+            genesis.blockHash,
+            v,
+            bonds,
+            justifications.map(b => b.getHeader.validatorPublicKey -> b.blockHash).toMap,
+            lfb = lfb
+          ).map {
+            case (block, finalizedBlocks) =>
+              val finalizedBlocksHashes =
+                finalizedBlocks.map(_.consensusValue.show).mkString("[", ", ", "]")
+              assert(
+                finalizedBlocks.isEmpty,
+                s"No blocks should be finalized. ${block.blockHash} finalized $finalizedBlocksHashes."
+              )
+              (lfb, block) //We know that in this specific test LFB should not change
+          }
+        }
+
+      for {
+
+        dag <- storage.getRepresentation
+        implicit0(detector: FinalityDetectorVotingMatrix[Task]) <- mkVotingMatrix(
+                                                                    dag,
+                                                                    genesis,
+                                                                    isHighway = true
+                                                                  )
+        test = for {
+          b994 <- createAndAdvanceTheLFB(v3, genesis, List.empty)
+          b707 <- createAndAdvanceTheLFB(v5, genesis, List.empty)
+          b296 <- createAndAdvanceTheLFB(v1, b994, List(b994))
+          bo8a <- createAndAdvanceTheLFB(v1, b994, List(b296, b994))
+          b206 <- createAndAdvanceTheLFB(v3, b994, List(b994))
+          b8a1 <- createAndAdvanceTheLFB(v5, b994, List(b994, b296, b206, b707))
+          bc7e <- createAndAdvanceTheLFB(v1, b994, List(bo8a, b206))
+          bc38 <- createAndAdvanceTheLFB(v3, b994, List(b206))
+          b66a <- createAndAdvanceTheLFB(v1, b994, List(bc7e, b707))
+          bb9b <- createAndAdvanceTheLFB(v4, b707, List(b707))
+          b6e2 <- createAndAdvanceTheLFB(v2, b994, List(bo8a, b206, bb9b))
+          b1ee <- createAndAdvanceTheLFB(v4, b707, List(bb9b))
+          b5d6 <- createAndAdvanceTheLFB(v2, b994, List(b6e2, b1ee, b8a1))
+          b7f0 <- createAndAdvanceTheLFB(v5, b994, List(b8a1, bb9b, bc38, bo8a))
+          be2f <- createAndAdvanceTheLFB(v2, b994, List(b5d6, b7f0))
+          b5e4 <- createAndAdvanceTheLFB(v4, b707, List(bc7e, b206, b1ee, b707))
+        } yield ()
+        (lfb, _) <- test.run(genesis)
+        _        = assert(lfb == genesis)
       } yield ()
   }
 
