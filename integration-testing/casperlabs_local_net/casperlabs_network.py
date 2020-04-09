@@ -127,7 +127,7 @@ class CasperLabsNetwork:
                 # Waiting for the block with transaction that created new account to propagate to all nodes.
                 # Expensive, but some tests may rely on it.
                 wait_for_block_hash_propagated_to_all_nodes(
-                    node.cl_network.docker_nodes, block_hash
+                    node.cl_network.docker_nodes, block_hash, timeout_seconds=10*60
                 )
                 for deploy in node.client.show_deploys(block_hash):
                     assert (
@@ -613,33 +613,13 @@ class ThreeNodeNetwork(CasperLabsNetwork):
 
 
 class ThreeNodeHighwayNetwork(CasperLabsNetwork):
-    TIMESTAMP = int(round(time.time() * 1000))
-    NODE_ENV = dict(
-        # Old defaults
-        RUST_BACKTRACE="full",
-        CL_LOG_LEVEL=os.environ.get("CL_LOG_LEVEL", "INFO"),
-        CL_SERVER_NO_UPNP="true",
-        CL_VERSION="test",
-        # Highway
-        CL_HIGHWAY_ENABLED="true",
-        CL_HIGHWAY_INIT_ROUND_EXPONENT=14,
-        CL_CHAINSPEC_HIGHWAY_GENESIS_ERA_START=str(TIMESTAMP),
-        CL_CHAINSPEC_HIGHWAY_ERA_DURATION="4minutes",
-        CL_CHAINSPEC_HIGHWAY_BOOKING_DURATION="90seconds",
-        CL_CHAINSPEC_HIGHWAY_ENTROPY_DURATION="30seconds",
-        CL_CHAINSPEC_HIGHWAY_VOTING_PERIOD_DURATION="2minutes",
-        # Other node settings
-        CL_SERVER_RELAY_FACTOR=2,
-    )
 
     def get_node_config(self, network):
         kp = self.get_key()
-        logging.debug(f"ENV: {self.NODE_ENV}")
         return DockerConfig(
             self.docker_client,
             node_private_key=kp.private_key,
             node_public_key=kp.public_key,
-            node_env=self.NODE_ENV,
             node_account=kp,
             network=network,
             number_of_bonds=3,
@@ -747,7 +727,7 @@ class MultiNodeJoinedNetwork(CasperLabsNetwork):
 
 class CustomConnectionNetwork(CasperLabsNetwork):
     def create_cl_network(
-        self, node_count: int = 3, network_connections: List[List[int]] = None
+        self, node_count: int = 3, network_connections: List[List[int]] = None, node_env: Dict = None
     ) -> None:
         """
         Allow creation of a network where all nodes are not connected to node-0's network and therefore each other.
@@ -771,6 +751,7 @@ class CustomConnectionNetwork(CasperLabsNetwork):
             node_public_key=kp.public_key,
             network=self.create_docker_network(),
             node_account=kp,
+            node_env=node_env,
         )
         self.add_bootstrap(config)
 
@@ -781,6 +762,7 @@ class CustomConnectionNetwork(CasperLabsNetwork):
                 node_private_key=kp.private_key,
                 network=self.create_docker_network(),
                 node_account=kp,
+                node_env=node_env,
             )
             self.add_cl_node(config, network_with_bootstrap=False)
 

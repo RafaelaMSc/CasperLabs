@@ -204,7 +204,7 @@ def intercepted_two_node_network(docker_client_fixture):
         yield tnn
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def chainspec_upgrades_network_major(docker_client_fixture):
     with OneNodeNetworkWithChainspecUpgrades(
         docker_client_fixture, chainspec_directory="test-chainspec"
@@ -213,7 +213,7 @@ def chainspec_upgrades_network_major(docker_client_fixture):
         yield net
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def chainspec_upgrades_network_minor(docker_client_fixture):
     with OneNodeNetworkWithChainspecUpgrades(
         docker_client_fixture, chainspec_directory="test-chainspec-minor"
@@ -222,7 +222,7 @@ def chainspec_upgrades_network_minor(docker_client_fixture):
         yield net
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def chainspec_upgrades_network_etc(docker_client_fixture):
     with OneNodeNetworkWithChainspecUpgrades(
         docker_client_fixture, etc_casperlabs_directory="etc_casperlabs"

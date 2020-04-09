@@ -859,15 +859,19 @@ def check_dependencies_not_met(cli):
 
     # Make a deploy with dependency on a non-existing deploy.
     deploy_hash1 = bytes(range(32)).hex()
-    cli("deploy",
-        "--session", cli.resource(Contract.MAILING_LIST_DEFINE),
-        "--dependencies", deploy_hash1)
 
-    # This will not work when tests run in parallel, unless this is the only test
-    # that causes "OUT_OF_RANGE: No new deploy"
-
-    # 05:51:33   node-0-udcpq-latest: E 2020-02-04T04:51:33.059           (AutoProposer.scala:86)  ….AutoProposer.tryPropose.84 [72:node-runner-72] Could not propose block: ex=io.casperlabs.comm.ServiceError$Exception: OUT_OF_RANGE: No new deploys.
-    wait_for_no_new_deploys(cli.node)
+    # Deploy should not never be included in a block
+    # because its dependencies will not be met.
+    # To make sure this is true the timeout should be longer than 30 seconds,
+    # but I don't want the test to take too long.
+    # If it ever fails (exception is not thrown) then it most probably
+    # means a genuine problem.
+    with raises(Exception) as excinfo:
+        cli("deploy",
+            "--session", cli.resource(Contract.MAILING_LIST_DEFINE),
+            "--dependencies", deploy_hash1,
+            "--wait-for-processed",
+            "--timeout-seconds", 30)
 
 
 def test_ttl_ok_scala(scala_cli):

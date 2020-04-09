@@ -15,6 +15,7 @@ from casperlabs_local_net.wait import (
     wait_for_peers_count_exactly,
 )
 from casperlabs_local_net.casperlabs_accounts import Account, GENESIS_ACCOUNT
+from casperlabs_local_net import docker_config
 
 
 class DeployThread(threading.Thread):
@@ -107,7 +108,7 @@ def test_blocks_infect_network_R0(not_all_connected_directly_nodes):
     )
 
     block_hash = first.deploy_and_get_block_hash(
-        GENESIS_ACCOUNT, Contract.HELLO_NAME_DEFINE
+        GENESIS_ACCOUNT, Contract.HELLO_NAME_DEFINE, 15 * 60
     )
     wait_for_block_hash_propagated_to_all_nodes([last], block_hash)
 
@@ -115,9 +116,12 @@ def test_blocks_infect_network_R0(not_all_connected_directly_nodes):
 @pytest.fixture()
 def four_nodes_network(docker_client_fixture):
     with CustomConnectionNetwork(docker_client_fixture) as network:
+        node_env = dict(docker_config.HIGHWAY_NODE_ENV)
+        node_env['CL_CHAINSPEC_HIGHWAY_ERA_DURATION'] = "40minutes"
+
         # Initially all nodes are connected to each other
         network.create_cl_network(
-            4, [(i, j) for i in range(4) for j in range(4) if i != j and i < j]
+            4, [(i, j) for i in range(4) for j in range(4) if i != j and i < j], node_env
         )
 
         # Wait till all nodes have the genesis block.
@@ -127,7 +131,10 @@ def four_nodes_network(docker_client_fixture):
         yield network
 
 
-C = [Contract.HELLO_NAME_DEFINE, Contract.MAILING_LIST_DEFINE, Contract.HELLO_NAME_CALL]
+C = Contract.HELLO_NAME_DEFINE
+
+
+DEPLOY_PROCESSING_TIMEOUT_SECONDS = 15 * 60
 
 
 def test_network_partition_and_rejoin_RS(four_nodes_network):
@@ -141,7 +148,7 @@ def test_network_partition_and_rejoin_RS(four_nodes_network):
     # because account creation involves creating a block with a transfer
     # from genesis account and waiting for the block to propagate
     # to all nodes in the whole network, it would fail with nodes disconnected.
-    block_hash = nodes[0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C[0])
+    block_hash = nodes[0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C, timeout_seconds=DEPLOY_PROCESSING_TIMEOUT_SECONDS)
     wait_for_block_hash_propagated_to_all_nodes(nodes, block_hash)
 
     # Partition the network so node0 connected to node1 and node2 connected to node3 only.
@@ -150,11 +157,11 @@ def test_network_partition_and_rejoin_RS(four_nodes_network):
 
     logging.info("DISCONNECT PARTITIONS")
     for connection in connections_between_partitions:
-        logging.info("DISCONNECTING PARTITION: {}".format(connection))
+        logging.info(f"DISCONNECTING PARTITION: {connection}")
         four_nodes_network.disconnect(connection)
 
     partitions = nodes[: int(n / 2)], nodes[int(n / 2) :]
-    logging.info("PARTITIONS: {}".format(partitions))
+    logging.info(f"PARTITIONS: {partitions}")
 
     # Node updates its list of alive peers in background with a certain period
     # So we need to wait here for nodes to re-connect partitioned peers
@@ -162,15 +169,13 @@ def test_network_partition_and_rejoin_RS(four_nodes_network):
         for node in partition:
             wait_for_peers_count_exactly(node, len(partition) - 1, 60)
 
-    # Propose separately in each partition. They should not see each others' blocks,
+    logging.info("PROPOSE IN EACH PARTITION")
+    # Deploy separately in each partition. They should not see each others' blocks,
     # so everyone has the genesis block, extra block created above,
     # and the 1 block proposed in its partition.
-    # Using the same nonce in both partitions because otherwise one of them will
-    # sit there unable to propose; should use separate accounts really.
-    # TODO Change to multiple accounts
     block_hashes = (
-        partitions[0][0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C[0]),
-        partitions[1][0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C[1]),
+        partitions[0][0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C, timeout_seconds=DEPLOY_PROCESSING_TIMEOUT_SECONDS),
+        partitions[1][0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C, timeout_seconds=DEPLOY_PROCESSING_TIMEOUT_SECONDS),
     )
 
     for partition, block_hash in zip(partitions, block_hashes):
@@ -188,11 +193,11 @@ def test_network_partition_and_rejoin_RS(four_nodes_network):
     for node in nodes:
         wait_for_peers_count_exactly(node, n - 1, 60)
 
-    # When we propose a node in partition[0] it should propagate to partition[1],
+    # When we propose on a node in partition[0] it should propagate to partition[1],
     # however, nodes in partition[0] will still not see blocks from partition[1]
     # until they also propose a new one on top of the block the created during
     # the network outage.
-    block_hash = nodes[0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C[2])
+    block_hash = nodes[0].deploy_and_get_block_hash(GENESIS_ACCOUNT, C, timeout_seconds=DEPLOY_PROCESSING_TIMEOUT_SECONDS)
 
     for partition, old_hash in zip(partitions, block_hashes):
         logging.info(f"CHECK {partition} HAS ALL BLOCKS CREATED IN BOTH PARTITIONS")

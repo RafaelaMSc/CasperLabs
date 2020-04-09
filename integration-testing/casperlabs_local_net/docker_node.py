@@ -26,7 +26,7 @@ from casperlabs_local_net import grpc_proxy
 from casperlabs_local_net.grpc_proxy import KademliaInterceptor, GossipInterceptor
 
 FIRST_VALIDATOR_ACCOUNT = 100
-
+DEPLOY_TIMEOUT = 3*60  # seconds
 
 class DockerNode(LoggingDockerBase):
     """
@@ -259,7 +259,7 @@ class DockerNode(LoggingDockerBase):
             self.config.socket_volume: {"bind": self.CL_SOCKETS_DIR, "mode": "rw"},
         }
         for k in d:
-            logging.info(f"================ VOLUME: {k} => {d[k]}")
+            logging.debug(f"================ VOLUME: {k} => {d[k]}")
         return d
 
     def _get_container(self):
@@ -395,6 +395,7 @@ class DockerNode(LoggingDockerBase):
         payment_args: bytes = MAX_PAYMENT_ABI,
         gas_price: int = 1,
         is_deploy_error_check: bool = True,
+        timeout_seconds: int = 10 * 60,
     ) -> str:
         """
         Performs a transfer using the from account if given (or genesis if not)
@@ -442,7 +443,7 @@ class DockerNode(LoggingDockerBase):
 
         client = self.p_client.client
         result = client.wait_for_deploy_processed(
-            deploy_hash, on_error_raise=is_deploy_error_check
+            deploy_hash, on_error_raise=is_deploy_error_check, timeout_seconds=timeout_seconds
         )
         last_processing_result = result.processing_results[0]
         block_hash = last_processing_result.block_info.summary.block_hash.hex()
@@ -552,11 +553,11 @@ class DockerNode(LoggingDockerBase):
         if rc != 0:
             raise Exception(f"Error executing '{cmd}: Exit code {rc}: {output}")
 
-    def deploy_and_wait_for_processed(self, on_error_raise=True, **deploy_kwargs):
+    def deploy_and_wait_for_processed(self, on_error_raise=True, timeout_seconds=DEPLOY_TIMEOUT, **deploy_kwargs):
         client = self.p_client.client
         deploy_hash = client.deploy(**deploy_kwargs)
         deploy_info = client.wait_for_deploy_processed(
-            deploy_hash, on_error_raise=on_error_raise
+            deploy_hash, on_error_raise=on_error_raise, timeout_seconds=timeout_seconds,
         )
         return deploy_info
 

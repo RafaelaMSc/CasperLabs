@@ -1,6 +1,7 @@
 import logging
 from casperlabs_local_net.cli import CLI
 from casperlabs_local_net.common import Contract
+from casperlabs_client.abi import ABI
 
 
 def get_cost_and_block_hash(node, deploy_hash):
@@ -51,7 +52,7 @@ def check_upgrades_applied(network):
     )
 
     # First deploy
-    deploy_hash = cli("deploy", "--payment-amount", 10000000, "--session", cli.resource(Contract.COUNTER_DEFINE))
+    deploy_hash = cli("deploy", "--payment-amount", 10000000, "--session", cli.resource(Contract.HELLO_NAME_DEFINE))
     get_cost_and_block_hash(node, deploy_hash)
 
     # When activation-point-rank of an upgrade is reached, and upgrade is executed,
@@ -78,12 +79,15 @@ def check_upgrades_applied(network):
         position = i + offset
         if position == upgrade_1 or position == upgrade_2:
             logging.info(f'Redeploying contract at position {position}')
-            deploy_hash = cli("deploy", "--payment-amount", 10000000, "--session", cli.resource(Contract.COUNTER_DEFINE))
+            deploy_hash = cli("deploy", "--payment-amount", 10000000, "--session", cli.resource(Contract.HELLO_NAME_DEFINE))
             get_cost_and_block_hash(node, deploy_hash)
             # Add up, as another deploy shifts the block position
             offset += 1
 
-        deploy_hash = cli("deploy", "--payment-amount", 10000000, "--session", cli.resource(Contract.COUNTER_CALL))
+        deploy_hash = cli("deploy",
+                          "--payment-amount", 10000000,
+                          "--session", cli.resource(Contract.HELLO_NAME_DEFINE),
+                          "--session-args", ABI.args_to_json(ABI.args([ABI.string_value("name", "Piotr")])))
         cost, block_hash = get_cost_and_block_hash(node, deploy_hash)
         if cost not in costs:
             logging.info(f"Execution cost at iteration {i}, is {cost}. ")

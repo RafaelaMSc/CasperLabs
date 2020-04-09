@@ -1,32 +1,22 @@
 [genesis]
 
 name = "casperlabs-devnet"
-
 timestamp = 0
-
 protocol-version = "1.0.0"
-
 mint-code-path = "mint_install.wasm"
-
 pos-code-path = "pos_install.wasm"
-
 initial-accounts-path = "accounts.csv"
 
 [highway]
 
-
+enabled = true
+omega-blocks-enabled = true
 genesis-era-start = 1583712000000
-
-era-duration = "7days"
-
-booking-duration = "10days"
-
-entropy-duration = "3hours"
-
-voting-period-duration = "2days"
-
+era-duration = "4minutes"
+booking-duration = "90seconds"
+entropy-duration = "30seconds"
+voting-period-duration = "2minutes"
 voting-period-summit-level = 0
-
 ftt = 0.1
 
 [deploys]
